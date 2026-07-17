@@ -2,7 +2,7 @@ import { ForecastBand } from "@/components/ForecastBand";
 import { SignalCard } from "@/components/SignalCard";
 import { Sparkline } from "@/components/Sparkline";
 import { engine, macroRepo, priceRepo } from "@/lib/container";
-import { IS_SAMPLE_DATA } from "@/lib/data/seed";
+import { priceProvenance } from "@/lib/data/cachedRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ export default async function Page() {
   ]);
   const full = await priceRepo.getSeries("gold", 200);
   const analysis = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 30 });
+  const prov = priceProvenance("gold");
 
   const spot = analysis.spot;
   const first = series[0].close;
@@ -45,11 +46,16 @@ export default async function Page() {
         </div>
       </header>
 
-      {IS_SAMPLE_DATA && (
+      {prov.live ? (
+        <div className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200">
+          <strong>Live data.</strong> Gold from{" "}
+          <code className="text-emerald-100">{prov.source}</code>, as of {prov.asOf}. Macro
+          from Yahoo/FRED. Real market data — still probabilistic, never a guarantee.
+        </div>
+      ) : (
         <div className="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
-          <strong>Sample data.</strong> This build uses deterministic illustrative
-          data, not live market prices. Live feeds plug into the same interfaces in
-          Phase&nbsp;1.
+          <strong>Sample data.</strong> No live data ingested yet — showing
+          deterministic fallback. Run <code>POST /api/ingest</code> to pull real prices.
         </div>
       )}
 

@@ -1,0 +1,18 @@
+/**
+ * Central runtime config. Reads env with safe defaults so the app runs with an
+ * empty .env (keyless mode). One place to see every knob.
+ */
+export const config = {
+  /** FRED API key — optional. Absent → macro degrades gracefully (ADR-0003). */
+  fredApiKey: process.env.FRED_API_KEY ?? "",
+  /** SQLite file location. */
+  dbPath: process.env.PHOENIX_DB_PATH ?? "phoenix.db",
+  /** Master switch: use live sources + SQLite, or fall back to pure seed data. */
+  useLiveData: (process.env.PHOENIX_LIVE_DATA ?? "true") !== "false",
+  /** Network timeout for source fetches (ms). */
+  fetchTimeoutMs: Number(process.env.PHOENIX_FETCH_TIMEOUT_MS ?? 12000),
+} as const;
+
+export function hasFred(): boolean {
+  return config.fredApiKey.trim().length > 0;
+}

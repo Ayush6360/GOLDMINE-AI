@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { engine, macroRepo, priceRepo } from "@/lib/container";
-import { IS_SAMPLE_DATA } from "@/lib/data/seed";
+import { priceProvenance } from "@/lib/data/cachedRepository";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,8 @@ export async function GET(request: Request) {
     }
 
     const result = await engine.analyze({ asset: "gold", series, macro, horizonDays });
-    return NextResponse.json({ ...result, isSampleData: IS_SAMPLE_DATA });
+    const prov = priceProvenance("gold");
+    return NextResponse.json({ ...result, live: prov.live, source: prov.source });
   } catch (err) {
     return NextResponse.json({ error: "analysis_failed" }, { status: 500 });
   }

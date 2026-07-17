@@ -1,7 +1,9 @@
-node_modules
-.next
-out
+node_modules/
+.next/
+out/
+*.tsbuildinfo
 .env*
 !.env.example
-*.tsbuildinfo
-next-env.d.ts.bak
+phoenix.db
+phoenix.db-wal
+phoenix.db-shm
