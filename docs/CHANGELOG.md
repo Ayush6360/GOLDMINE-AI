@@ -2,6 +2,20 @@
 
 All notable changes to Phoenix.
 
+## [0.9.0] — 2026-07-17
+### Added — RAG AI assistant "Ask Phoenix" (ADR-0009)
+- Retriever (`assistant/retriever.ts`): pulls relevant context from OUR ingested data
+  — news (keyword + recency scored), price moves, macro — for a user question.
+- `IAnswerGenerator` seam with two implementations:
+  - `GroundedComposer` (keyless default): deterministic, cited answers strictly from
+    retrieved facts. Cannot hallucinate numbers or promise prices.
+  - `ClaudeGenerator` (optional, Claude Opus 4.8): used when `ANTHROPIC_API_KEY` set,
+    with a locked system prompt (use only context, cite, never guarantee a price,
+    state honest ~60% weekly / ~55% daily accuracy). Falls back to the composer on error.
+- `POST /api/assistant`; "Ask Phoenix" dashboard component (suggestions, cited answers).
+- Verified live with Claude: "Why is gold moving?" → grounded synthesis citing real
+  retail-sales/Fed headlines; INR outlook correctly quotes ₹/10g. Both currencies work.
+
 ## [0.8.0] — 2026-07-17
 ### Added — Macro-shock features + a VALIDATED weekly edge (ADR-0008)
 - Macro-shock proxy features (`cross_features.py`): z-scored abnormal 1-day moves in

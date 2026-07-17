@@ -13,7 +13,13 @@ export const config = {
   fetchTimeoutMs: Number(process.env.PHOENIX_FETCH_TIMEOUT_MS ?? 12000),
   /** Python ML service base URL (opt-in, experimental — ADR-0005). */
   mlServiceUrl: process.env.PHOENIX_ML_URL ?? "http://127.0.0.1:8001",
+  /** Anthropic API key — optional. If set, the assistant uses Claude (ADR-0009). */
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
 } as const;
+
+export function hasAnthropic(): boolean {
+  return config.anthropicApiKey.trim().length > 0;
+}
 
 export function hasFred(): boolean {
   return config.fredApiKey.trim().length > 0;

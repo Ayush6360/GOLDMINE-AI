@@ -1,4 +1,5 @@
 import { CurrencyToggle } from "@/components/CurrencyToggle";
+import { Assistant } from "@/components/Assistant";
 import { ForecastBand } from "@/components/ForecastBand";
 import { SignalCard } from "@/components/SignalCard";
 import { Sparkline } from "@/components/Sparkline";
@@ -123,6 +124,10 @@ export default async function Page({
             <>News sentiment ({sentiment.scoredCount} headlines, net {sentiment.net.toFixed(2)}) is factored in below.</>
           )}
         </p>
+      </section>
+
+      <section className="mt-6">
+        <Assistant currency={currency} />
       </section>
 
       <section className="mt-6 rounded-xl bg-phoenix-panel/70 p-5 ring-1 ring-white/5">
