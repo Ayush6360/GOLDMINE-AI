@@ -121,3 +121,38 @@ export class SqliteMacroRepository implements IMacroRepository {
 function round2(x: number): number {
   return Math.round(x * 100) / 100;
 }
+
+/**
+ * Honest macro provenance: for each macro field, report whether it comes from real
+ * FRED data, a Yahoo feed, an approximation, or the seed fallback. Lets the UI show
+ * users exactly which numbers are real vs derived (ADR-0002 honesty principle).
+ */
+export function macroProvenance(): Record<string, { value: number | null; source: string }> {
+  const get = (indicator: string): { value: number; source: string; date: string } | null => {
+    try {
+      const row = db()
+        .prepare(`SELECT value, source, date FROM macro WHERE indicator = ? ORDER BY date DESC LIMIT 1`)
+        .get(indicator) as { value: number; source: string; date: string } | undefined;
+      return row ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const dxy = get("dxy");
+  const nominal = get("us10y_nominal");
+  const realYield = get("real_yield_10y");
+  const cpi = get("cpi_yoy");
+  const policy = get("policy_rate");
+
+  return {
+    dxy: dxy ? { value: dxy.value, source: dxy.source } : { value: null, source: "seed" },
+    realYield10y: realYield
+      ? { value: realYield.value, source: realYield.source } // real FRED DFII10
+      : nominal && cpi
+        ? { value: round2(nominal.value - cpi.value), source: "approx (nominal−CPI)" }
+        : { value: null, source: "seed" },
+    cpiYoY: cpi ? { value: cpi.value, source: cpi.source } : { value: null, source: "seed" },
+    policyRate: policy ? { value: policy.value, source: policy.source } : { value: null, source: "seed" },
+  };
+}
