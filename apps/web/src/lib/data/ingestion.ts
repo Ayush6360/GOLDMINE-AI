@@ -60,6 +60,7 @@ export async function runIngestion(): Promise<IngestReport> {
     ["us10y_nominal", YAHOO_SYMBOLS.us10y],
     ["oil_wti", YAHOO_SYMBOLS.oil],
     ["silver", YAHOO_SYMBOLS.silver],
+    ["usdinr", YAHOO_SYMBOLS.usdinr],
   ];
   for (const [indicator, symbol] of yahooMacro) {
     try {

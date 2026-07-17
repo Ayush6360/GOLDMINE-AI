@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { engine, macroRepo, mlEngine, priceRepo } from "@/lib/container";
-import { priceProvenance } from "@/lib/data/cachedRepository";
+import { fxRateUsdInr, priceProvenance } from "@/lib/data/cachedRepository";
 import { getLiveSentiment } from "@/lib/data/sentimentProvider";
+import { convertGoldPrice } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     }
 
     const prov = priceProvenance("gold");
+    const fx = fxRateUsdInr();
     return NextResponse.json({
       ...result,
       live: prov.live,
@@ -48,6 +50,17 @@ export async function GET(request: Request) {
       sentiment,
       engineUsed,
       mlFallback,
+      currency: {
+        usdInr: fx.rate,
+        usdInrLive: fx.live,
+        // Same forecast expressed in INR per 10 grams, for INR-native clients.
+        inr10g: {
+          spot: Math.round(convertGoldPrice(result.spot, "INR", fx.rate)),
+          central: Math.round(convertGoldPrice(result.forecast.central, "INR", fx.rate)),
+          lower: Math.round(convertGoldPrice(result.forecast.lower, "INR", fx.rate)),
+          upper: Math.round(convertGoldPrice(result.forecast.upper, "INR", fx.rate)),
+        },
+      },
       mlNote:
         "The ML engine is experimental and did NOT beat the honest baseline in walk-forward testing (ADR-0005). It is offered for comparison, not as a more-accurate forecast.",
     });

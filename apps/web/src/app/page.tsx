@@ -1,13 +1,26 @@
+import { CurrencyToggle } from "@/components/CurrencyToggle";
 import { ForecastBand } from "@/components/ForecastBand";
 import { SignalCard } from "@/components/SignalCard";
 import { Sparkline } from "@/components/Sparkline";
 import { engine, macroRepo, priceRepo } from "@/lib/container";
-import { priceProvenance } from "@/lib/data/cachedRepository";
+import { fxRateUsdInr, priceProvenance } from "@/lib/data/cachedRepository";
 import { getLiveSentiment } from "@/lib/data/sentimentProvider";
+import { convertGoldPrice, formatPrice, viewFor, type Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ ccy?: string }>;
+}) {
+  const { ccy } = await searchParams;
+  const currency: Currency = ccy === "INR" ? "INR" : "USD";
+  const view = viewFor(currency);
+  const fx = fxRateUsdInr();
+  /** Convert a raw USD/oz value into the selected currency view + format it. */
+  const fmt = (usdPerOz: number) => formatPrice(convertGoldPrice(usdPerOz, currency, fx.rate), view);
+
   const [series, macro] = await Promise.all([
     priceRepo.getSeries("gold", 120),
     macroRepo.getLatest(),
@@ -42,9 +55,11 @@ export default async function Page() {
           </p>
         </div>
         <div className="text-right">
-          <div className="text-3xl font-semibold text-phoenix-gold">
-            ${spot.toLocaleString()}
+          <div className="mb-2 flex justify-end">
+            <CurrencyToggle current={currency} />
           </div>
+          <div className="text-3xl font-semibold text-phoenix-gold">{fmt(spot)}</div>
+          <div className="text-xs text-phoenix-muted">{view.unitLabel}</div>
           <div className={`text-sm ${chg >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
             {chg >= 0 ? "▲" : "▼"} {(chg * 100).toFixed(2)}% · 120d
           </div>
@@ -55,7 +70,10 @@ export default async function Page() {
         <div className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200">
           <strong>Live data.</strong> Gold from{" "}
           <code className="text-emerald-100">{prov.source}</code>, as of {prov.asOf}. Macro
-          from Yahoo/FRED. Real market data — still probabilistic, never a guarantee.
+          from Yahoo/FRED. {currency === "INR" && (
+            <>USD/INR {fx.rate.toFixed(2)}{fx.live ? "" : " (fallback)"}, converted to ₹/10g. </>
+          )}
+          Real market data — still probabilistic, never a guarantee.
         </div>
       ) : (
         <div className="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
@@ -68,7 +86,7 @@ export default async function Page() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-phoenix-muted">Tomorrow — probabilistic read</h2>
           <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-phoenix-muted">
-            backtested ~56% directional
+            backtested ~55% directional
           </span>
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-2">
@@ -85,16 +103,17 @@ export default async function Page() {
             </div>
           </div>
           <div>
-            <div className="text-xs text-phoenix-muted">Likely range (80%)</div>
+            <div className="text-xs text-phoenix-muted">Likely range (80%, {view.unitLabel})</div>
             <div className="text-lg font-semibold text-phoenix-gold">
-              ${nextDay.forecast.lower.toLocaleString()} – ${nextDay.forecast.upper.toLocaleString()}
+              {fmt(nextDay.forecast.lower)} – {fmt(nextDay.forecast.upper)}
             </div>
           </div>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-phoenix-muted">
           This is a <strong>probability, not a promise</strong>. Next-day gold is near
-          a random walk; backtesting shows ~56% directional accuracy — a modest, honest
-          edge. The range is the real forecast. {sentiment.scoredCount > 0 && (
+          a random walk; honest backtesting shows only ~54–56% directional accuracy — a
+          modest edge, near the ceiling for price-history alone. The range is the real
+          forecast, not the single number. {sentiment.scoredCount > 0 && (
             <>News sentiment ({sentiment.scoredCount} headlines, net {sentiment.net.toFixed(2)}) is factored in below.</>
           )}
         </p>
@@ -106,7 +125,7 @@ export default async function Page() {
       </section>
 
       <section className="mt-6 grid gap-6 md:grid-cols-2">
-        <ForecastBand forecast={analysis.forecast} spot={spot} />
+        <ForecastBand forecast={analysis.forecast} spot={spot} fmt={fmt} />
         <div className="rounded-xl bg-phoenix-panel/70 p-5 ring-1 ring-white/5">
           <h3 className="text-sm font-medium text-phoenix-muted">Macro snapshot</h3>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">

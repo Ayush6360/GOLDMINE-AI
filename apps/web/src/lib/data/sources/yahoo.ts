@@ -77,4 +77,5 @@ export const YAHOO_SYMBOLS = {
   us10y: "^TNX",
   oil: "CL=F",
   silver: "SI=F",
+  usdinr: "USDINR=X",
 } as const;

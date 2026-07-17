@@ -28,6 +28,24 @@ export function priceProvenance(asset: AssetId = "gold"): { live: boolean; sourc
   }
 }
 
+/**
+ * Latest USD/INR exchange rate from the macro store. Falls back to a recent
+ * plausible level if not yet ingested (so INR view always renders). `live` tells the
+ * UI whether the rate is real or a fallback — honest provenance (ADR-0002).
+ */
+export function fxRateUsdInr(): { rate: number; live: boolean; asOf: string | null } {
+  const FALLBACK = 96.0;
+  try {
+    const row = db()
+      .prepare(`SELECT value, date FROM macro WHERE indicator = 'usdinr' ORDER BY date DESC LIMIT 1`)
+      .get() as { value: number; date: string } | undefined;
+    if (!row) return { rate: FALLBACK, live: false, asOf: null };
+    return { rate: row.value, live: true, asOf: row.date };
+  } catch {
+    return { rate: FALLBACK, live: false, asOf: null };
+  }
+}
+
 export class SqlitePriceRepository implements IPriceRepository {
   async getSeries(asset: AssetId, days: number): Promise<PricePoint[]> {
     try {

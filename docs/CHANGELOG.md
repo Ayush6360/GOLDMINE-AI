@@ -2,6 +2,20 @@
 
 All notable changes to Phoenix.
 
+## [0.5.0] — 2026-07-17
+### Added — USD + INR currency support
+- USD/INR FX ingested from Yahoo (`USDINR=X`, keyless), stored in SQLite macro table.
+- Currency conversion util (`lib/currency.ts`): USD/oz → INR per 10g using the exact
+  troy-ounce constant (31.1034768 g); one place for the math.
+- Dashboard currency toggle (USD /oz ↔ INR /10g) via `?ccy=` URL param; all displayed
+  prices (spot, next-day range, forecast band) convert correctly. INR shown in the
+  Indian ₹/10g convention with a live/fallback FX label.
+- Analysis API returns a `currency` block (usdInr rate + INR/10g spot/central/band).
+- Verified conversion math: $3,997.10/oz × 96.27 ÷ 31.1035 × 10 = ₹123,716/10g (exact).
+### Changed
+- Accuracy framing corrected across UI to the honest ~54–56% (was optimistically 56%);
+  copy now states this is near the ceiling for price-history alone.
+
 ## [0.4.0] — 2026-07-17
 ### Added — real Python ML service (ADR-0005)
 - **Python 3.12 installed** (winget). `services/ml-service`: FastAPI + LightGBM.
