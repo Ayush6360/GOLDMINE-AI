@@ -95,13 +95,13 @@ def train(closes: pd.Series, horizon: int = 1) -> GoldModel:
     )
 
 
-def train_cross(df: pd.DataFrame, horizon: int = 1) -> GoldModel:
-    """Train using cross-asset features (ADR-0006). `df` has columns gold, dxy,
-    silver, us10y, oil. This is the shipped model: the honest experiment showed
-    cross-asset features give a small real edge over gold-only.
+def train_cross(df: pd.DataFrame, horizon: int = 1, include_shock: bool = False) -> GoldModel:
+    """Train using cross-asset (and optionally macro-shock) features (ADR-0006/0008).
+    `df` has columns gold, dxy, silver, us10y, oil. The validated shipping config is
+    horizon=10 with include_shock=True (weekly outlook, ~60% directional, ADR-0008).
     """
-    cols = all_feature_columns(include_cross=True)
-    feats = build_cross_features(df)
+    cols = all_feature_columns(include_cross=True, include_shock=include_shock)
+    feats = build_cross_features(df, include_shock=include_shock)
     fwd, up = make_labels(df["gold"], horizon)
     data = feats[cols].copy()
     data["_fwd"] = fwd
@@ -145,7 +145,8 @@ def predict_last(model: GoldModel, closes: pd.Series) -> Prediction:
     """
     needs_cross = any(c in model.features for c in _CROSS_ONLY_COLS)
     if needs_cross:
-        feats = _serving_cross_features(closes)
+        needs_shock = any(c in model.features for c in _SHOCK_COLS)
+        feats = _serving_cross_features(closes, include_shock=needs_shock)
     else:
         feats = build_features(closes)
 
@@ -169,24 +170,25 @@ def predict_last(model: GoldModel, closes: pd.Series) -> Prediction:
     return Prediction(prob_up=prob_up, ret_low=ret_low, ret_high=ret_high, contributions=contributions)
 
 
-# Columns that only exist in the cross-asset feature set.
+# Columns that only exist in the cross-asset / shock feature sets.
 _CROSS_ONLY_COLS = {
     "dxy_ret_1", "dxy_ret_5", "silver_ret_1", "silver_ret_5",
     "gold_silver_ratio_z", "us10y_chg_5", "oil_ret_5", "gold_dxy_corr_20",
+    "dxy_shock_z", "us10y_shock_z", "oil_shock_z", "abs_macro_shock",
 }
+_SHOCK_COLS = {"dxy_shock_z", "us10y_shock_z", "oil_shock_z", "abs_macro_shock"}
 
 
-def _serving_cross_features(closes: pd.Series):
+def _serving_cross_features(closes: pd.Series, include_shock: bool):
     """Fetch fresh cross-asset context and build the full feature frame. Aligns the
     provided gold closes with freshly-fetched cross assets by date."""
     from .data_client import fetch_multi_asset  # local import avoids cycle at import
 
     df = fetch_multi_asset(range_="1y")
-    # Prefer the caller's gold series where dates overlap (it's the source of truth).
     df = df.copy()
     df.loc[df.index.isin(closes.index), "gold"] = closes.reindex(df.index)
     df = df.dropna(subset=["gold"])
-    return build_cross_features(df)
+    return build_cross_features(df, include_shock=include_shock)
 
 
 def _explain(model: GoldModel, x: pd.DataFrame) -> list[tuple[str, float]]:

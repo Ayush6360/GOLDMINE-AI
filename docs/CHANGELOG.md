@@ -2,6 +2,24 @@
 
 All notable changes to Phoenix.
 
+## [0.8.0] — 2026-07-17
+### Added — Macro-shock features + a VALIDATED weekly edge (ADR-0008)
+- Macro-shock proxy features (`cross_features.py`): z-scored abnormal 1-day moves in
+  DXY / 10y / oil — the observable footprint of a macro surprise (true "vs consensus"
+  surprise needs a paid calendar feed; documented honestly).
+- Experiment harness extended to gold-only vs cross vs cross+shock across horizons.
+- **VALIDATED RESULT:** cross+shock @ 10-day horizon = **~60% directional**, +4.6 to
+  +13.3 pts over baseline — **positive in every test window** (unlike the fragile 1-day
+  edge). Macro-shock adds ~3–4 pts on top of cross-asset. Robust, not luck.
+- Shipped: ML engine model is now cross+shock @ horizon 10 (weekly outlook). Serving
+  path computes shock features live; `/health` publishes validated metrics.
+- **Honest boundary:** this is a WEEKLY outlook (~60%). NEXT-DAY stays ~55% (coin
+  flip) — shock features hurt at 1-day. Product copy must reflect this.
+- ADR-0008 includes a full **data survey**: ranked list of every data type that could
+  raise accuracy (true macro surprise, central-bank buying, ETF flows, COT, implied
+  vol, FRED real yields) with real access/cost — and what's not worth it (social
+  sentiment, deep learning on 500 rows).
+
 ## [0.7.0] — 2026-07-17
 ### Added — Alerts engine + AI report generator (ADR-0007) — the sellable value layer
 - **Alerts:** SQLite `alerts` + `triggered_alerts` tables; engine supports

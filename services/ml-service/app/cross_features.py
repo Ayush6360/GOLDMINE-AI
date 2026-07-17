@@ -26,11 +26,23 @@ CROSS_FEATURE_COLUMNS = [
     "gold_dxy_corr_20",
 ]
 
+# Macro-SHOCK proxy features (ADR-0008). Not true "surprise vs consensus" (that
+# needs a paid economic-calendar feed) — instead we flag when a macro driver moves
+# far outside its own recent normal range (z-scored 1-day move). A big, abnormal
+# dollar/yield/oil move is the observable footprint of a macro surprise.
+SHOCK_FEATURE_COLUMNS = [
+    "dxy_shock_z",
+    "us10y_shock_z",
+    "oil_shock_z",
+    "abs_macro_shock",
+]
 
-def build_cross_features(df: pd.DataFrame) -> pd.DataFrame:
+
+def build_cross_features(df: pd.DataFrame, include_shock: bool = False) -> pd.DataFrame:
     """df has columns gold, dxy, silver, us10y, oil (from fetch_multi_asset).
 
-    Returns gold features + cross-asset features, aligned, causal.
+    Returns gold features + cross-asset features (+ macro-shock proxies if requested),
+    aligned, causal.
     """
     gold = df["gold"]
     out = build_features(gold)  # the base gold features
@@ -54,7 +66,29 @@ def build_cross_features(df: pd.DataFrame) -> pd.DataFrame:
     if "oil" in df:
         out["oil_ret_5"] = df["oil"].pct_change(5)
 
+    if include_shock:
+        # z-score of the 1-day move vs its own trailing 20-day distribution.
+        if "dxy" in df:
+            out["dxy_shock_z"] = _move_shock(df["dxy"])
+        if "us10y" in df:
+            out["us10y_shock_z"] = _move_shock(df["us10y"], diff=True)
+        if "oil" in df:
+            out["oil_shock_z"] = _move_shock(df["oil"])
+        # Combined magnitude of macro shocks today (how "eventful" the day was).
+        shock_cols = [c for c in ("dxy_shock_z", "us10y_shock_z", "oil_shock_z") if c in out]
+        if shock_cols:
+            out["abs_macro_shock"] = out[shock_cols].abs().sum(axis=1)
+
     return out
+
+
+def _move_shock(s: pd.Series, window: int = 20, diff: bool = False) -> pd.Series:
+    """z-score of today's move vs the trailing distribution of moves. Large |z| = an
+    abnormal move = the observable footprint of a macro surprise (ADR-0008)."""
+    move = s.diff() if diff else s.pct_change()
+    mean = move.rolling(window).mean()
+    std = move.rolling(window).std()
+    return (move - mean) / std.replace(0, np.nan)
 
 
 def _zscore(s: pd.Series, window: int) -> pd.Series:
@@ -63,5 +97,10 @@ def _zscore(s: pd.Series, window: int) -> pd.Series:
     return (s - mean) / std.replace(0, np.nan)
 
 
-def all_feature_columns(include_cross: bool) -> list[str]:
-    return list(GOLD_FEATURES) + (list(CROSS_FEATURE_COLUMNS) if include_cross else [])
+def all_feature_columns(include_cross: bool, include_shock: bool = False) -> list[str]:
+    cols = list(GOLD_FEATURES)
+    if include_cross:
+        cols += list(CROSS_FEATURE_COLUMNS)
+    if include_shock:
+        cols += list(SHOCK_FEATURE_COLUMNS)
+    return cols

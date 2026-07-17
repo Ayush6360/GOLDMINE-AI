@@ -24,20 +24,23 @@ def main() -> int:
     parser.add_argument("--no-save", action="store_true", help="backtest only, don't persist")
     parser.add_argument("--test-days", type=int, default=250)
     parser.add_argument("--min-train", type=int, default=250)
-    parser.add_argument("--horizon", type=int, default=1)
+    parser.add_argument("--horizon", type=int, default=10, help="forecast horizon; 10=validated weekly outlook")
     parser.add_argument("--gold-only", action="store_true", help="use gold-only features (legacy)")
+    parser.add_argument("--no-shock", action="store_true", help="cross-asset only, drop macro-shock features")
     args = parser.parse_args()
 
     if args.gold_only:
         return _train_gold_only(args)
 
+    include_shock = not args.no_shock
     print("Fetching multi-asset history (gold + DXY + silver + 10y + oil)...")
     df = fetch_multi_asset(range_="2y")
     print(f"  {len(df)} aligned rows, {df.index[0]} -> {df.index[-1]}, last gold=${df['gold'].iloc[-1]:.2f}")
 
-    print("\nWalk-forward backtest (cross-asset, honest, causal)...")
+    print(f"\nWalk-forward backtest (cross{'+shock' if include_shock else ''}, honest, causal, h={args.horizon})...")
     metrics = walk_forward_config(df, include_cross=True, horizon=args.horizon,
-                                  min_train=args.min_train, test_days=args.test_days)
+                                  min_train=args.min_train, test_days=args.test_days,
+                                  include_shock=include_shock)
     print(json.dumps(metrics, indent=2))
     edge = metrics["beat_best_baseline"]
     print(f"\nHonest edge vs best baseline: {edge*100:+.1f} pts "
@@ -48,11 +51,11 @@ def main() -> int:
         return 0
 
     print("\nTraining live cross-asset model on full history...")
-    model = train_cross(df, horizon=args.horizon)
+    model = train_cross(df, horizon=args.horizon, include_shock=include_shock)
     model.metrics = metrics
     model.save()
     print(f"  Saved model trained_at={model.trained_at} on {model.train_rows} rows, "
-          f"{len(model.features)} features.")
+          f"{len(model.features)} features, horizon={args.horizon}.")
     return 0
 
 

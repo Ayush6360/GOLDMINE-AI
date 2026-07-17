@@ -22,12 +22,12 @@ from app.features import build_features, make_labels
 from app.model import _COMMON
 
 
-def _prep(df: pd.DataFrame, include_cross: bool, horizon: int):
+def _prep(df: pd.DataFrame, include_cross: bool, horizon: int, include_shock: bool = False):
     if include_cross:
-        feats = build_cross_features(df)
+        feats = build_cross_features(df, include_shock=include_shock)
     else:
         feats = build_features(df["gold"])
-    cols = all_feature_columns(include_cross)
+    cols = all_feature_columns(include_cross, include_shock)
     fwd, up = make_labels(df["gold"], horizon)
     data = feats[cols].copy()
     data["_up"] = up
@@ -35,8 +35,8 @@ def _prep(df: pd.DataFrame, include_cross: bool, horizon: int):
     return data, cols
 
 
-def walk_forward_config(df, include_cross: bool, horizon: int, min_train=250, test_days=200, refit_every=10):
-    data, cols = _prep(df, include_cross, horizon)
+def walk_forward_config(df, include_cross: bool, horizon: int, min_train=250, test_days=200, refit_every=10, include_shock=False):
+    data, cols = _prep(df, include_cross, horizon, include_shock)
     n = len(data)
     if n < min_train + 30:
         return None
@@ -59,8 +59,11 @@ def walk_forward_config(df, include_cross: bool, horizon: int, min_train=250, te
             up_c += 1
         total += 1
 
+    label = "gold-only"
+    if include_cross:
+        label = "cross+shock" if include_shock else "cross+gold"
     return {
-        "features": "cross+gold" if include_cross else "gold-only",
+        "features": label,
         "horizon": horizon,
         "samples": total,
         "model": round(model_c / total, 4),
@@ -77,11 +80,11 @@ def main() -> int:
     print(f"  columns: {list(df.columns)}\n")
 
     results = []
-    for include_cross in (False, True):
-        for horizon in (1, 3, 5, 10):
-            r = walk_forward_config(df, include_cross, horizon)
-            if r:
-                results.append(r)
+    for horizon in (1, 3, 5, 10):
+        results.append(walk_forward_config(df, False, horizon))
+        results.append(walk_forward_config(df, True, horizon, include_shock=False))
+        results.append(walk_forward_config(df, True, horizon, include_shock=True))
+    results = [r for r in results if r]
 
     # Rank by how much they beat the best baseline.
     results.sort(key=lambda r: r["beat_best_baseline"], reverse=True)
