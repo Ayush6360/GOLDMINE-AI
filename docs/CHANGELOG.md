@@ -2,6 +2,28 @@
 
 All notable changes to Phoenix.
 
+## [0.3.0] — 2026-07-17
+### Added — the honest forecasting loop (ADR-0004)
+- **Walk-forward backtester** (`engine/backtest.ts`): strictly causal (no lookahead),
+  scores directional accuracy vs naive random-walk + always-up baselines, plus MAE/
+  RMSE and band calibration. `GET /api/backtest`.
+- **Measured honest number:** on 250 real gold days, model = **56.0% directional**,
+  beating naive (47.6%) by +8.4 pts; band well-calibrated (77% vs 80% target).
+  Honest caveat surfaced: ~tied with always-up (55.6%) in this bull window.
+- **Keyless news source** (`sources/news.ts`): Google News + Yahoo RSS, dependency-
+  free RSS parser, dedupe. **Gold-oriented lexicon sentiment** (`features/sentiment.ts`)
+  — rate cut/weak dollar/haven = bullish; rate hike/strong dollar = bearish.
+- Sentiment wired into the engine as an OPTIONAL, explainable signal (absent in
+  backtests by design → keeps the test causal). Engine → v0.3.0.
+- News archive table + `sentimentProvider` (persists headlines so a sentiment
+  backtest corpus grows over time). Ingestion now archives news (119 real rows).
+- Dashboard: "Tomorrow — probabilistic read" card (direction, P(up), 80% range) and
+  live news-sentiment signal with real headlines as drivers.
+### Honest limitation documented
+- Free RSS = recent news only, not a deep per-day archive. Sentiment sharpens the
+  LIVE forecast now; full historical sentiment-backtesting needs an accumulated/
+  licensed archive (ADR-0004). We do not pretend otherwise.
+
 ## [0.2.0] — 2026-07-17
 ### Added
 - **Phase 1: real data.** Live gold prices + macro, $0/mo, keyless (ADR-0003).

@@ -55,6 +55,19 @@ function migrate(database: DatabaseSync): void {
       detail     TEXT
     );
   `);
+
+  // News headlines archive — grows over time so we can eventually backtest
+  // sentiment (ADR-0004). Keyed by URL to dedupe across ingest runs.
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS news (
+      url          TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      published_at TEXT NOT NULL,
+      source       TEXT NOT NULL,
+      score        REAL NOT NULL,
+      fetched_at   TEXT NOT NULL
+    );
+  `);
 }
 
 /** Test/maintenance helper: reset the singleton (used by scripts). */

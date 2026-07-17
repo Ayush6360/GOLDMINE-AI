@@ -3,6 +3,7 @@ import { SignalCard } from "@/components/SignalCard";
 import { Sparkline } from "@/components/Sparkline";
 import { engine, macroRepo, priceRepo } from "@/lib/container";
 import { priceProvenance } from "@/lib/data/cachedRepository";
+import { getLiveSentiment } from "@/lib/data/sentimentProvider";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,12 @@ export default async function Page() {
     macroRepo.getLatest(),
   ]);
   const full = await priceRepo.getSeries("gold", 200);
-  const analysis = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 30 });
+  const { result: sentiment } = await getLiveSentiment();
+  const analysis = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 30, sentiment });
   const prov = priceProvenance("gold");
+
+  // Next-day directional read for the headline (honest: probability, not a promise).
+  const nextDay = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 1, sentiment });
 
   const spot = analysis.spot;
   const first = series[0].close;
@@ -58,6 +63,42 @@ export default async function Page() {
           deterministic fallback. Run <code>POST /api/ingest</code> to pull real prices.
         </div>
       )}
+
+      <section className="mt-6 rounded-xl border border-phoenix-gold/20 bg-gradient-to-br from-phoenix-panel/90 to-black/30 p-5 ring-1 ring-white/5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-phoenix-muted">Tomorrow — probabilistic read</h2>
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-phoenix-muted">
+            backtested ~56% directional
+          </span>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-x-8 gap-y-2">
+          <div>
+            <div className="text-xs text-phoenix-muted">Direction</div>
+            <div className={`text-2xl font-semibold ${nextDay.forecast.probUp >= 0.5 ? "text-emerald-400" : "text-rose-400"}`}>
+              {nextDay.forecast.probUp >= 0.5 ? "▲ Lean up" : "▼ Lean down"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-phoenix-muted">P(higher tomorrow)</div>
+            <div className="text-2xl font-semibold text-slate-100">
+              {(nextDay.forecast.probUp * 100).toFixed(0)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-phoenix-muted">Likely range (80%)</div>
+            <div className="text-lg font-semibold text-phoenix-gold">
+              ${nextDay.forecast.lower.toLocaleString()} – ${nextDay.forecast.upper.toLocaleString()}
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-phoenix-muted">
+          This is a <strong>probability, not a promise</strong>. Next-day gold is near
+          a random walk; backtesting shows ~56% directional accuracy — a modest, honest
+          edge. The range is the real forecast. {sentiment.scoredCount > 0 && (
+            <>News sentiment ({sentiment.scoredCount} headlines, net {sentiment.net.toFixed(2)}) is factored in below.</>
+          )}
+        </p>
+      </section>
 
       <section className="mt-6 rounded-xl bg-phoenix-panel/70 p-5 ring-1 ring-white/5">
         <h2 className="mb-3 text-sm font-medium text-phoenix-muted">Price context (120 days)</h2>

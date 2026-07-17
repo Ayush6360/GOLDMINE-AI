@@ -1,6 +1,7 @@
 import { db } from "@/lib/data/db";
 import { fetchCpiYoY, fetchLatest, FRED_SERIES } from "@/lib/data/sources/fred";
 import { fetchDailyHistory, YAHOO_SYMBOLS } from "@/lib/data/sources/yahoo";
+import { getLiveSentiment } from "@/lib/data/sentimentProvider";
 import { hasFred } from "@/lib/config";
 
 /**
@@ -15,6 +16,7 @@ export interface IngestReport {
   status: "ok" | "partial" | "failed";
   pricesUpserted: number;
   macroUpserted: number;
+  newsUpserted: number;
   errors: string[];
   usedFred: boolean;
 }
@@ -26,6 +28,7 @@ export async function runIngestion(): Promise<IngestReport> {
     status: "ok",
     pricesUpserted: 0,
     macroUpserted: 0,
+    newsUpserted: 0,
     errors: [],
     usedFred: hasFred(),
   };
@@ -92,9 +95,19 @@ export async function runIngestion(): Promise<IngestReport> {
     }
   }
 
+  // --- News: fetch, score, and archive (grows the sentiment backtest corpus) ---
+  try {
+    const { result, items } = await getLiveSentiment();
+    report.newsUpserted = items.length;
+    if (items.length === 0) report.errors.push("news: no items fetched");
+    else report.errors.push(`news: net sentiment ${result.net} over ${result.scoredCount} scored`);
+  } catch (e) {
+    report.errors.push(`news: ${msg(e)}`);
+  }
+
   // Determine overall status.
   if (report.pricesUpserted === 0 && report.macroUpserted === 0) report.status = "failed";
-  else if (report.errors.length > 0) report.status = "partial";
+  else if (report.errors.some((e) => !e.startsWith("news: net"))) report.status = "partial";
 
   database
     .prepare("INSERT INTO ingest_runs (started_at, status, detail) VALUES (?, ?, ?)")

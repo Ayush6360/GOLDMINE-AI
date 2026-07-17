@@ -8,7 +8,7 @@ import type {
   Signal,
 } from "@/lib/domain/types";
 import { computeFeatures, type FeatureSet } from "@/lib/features/indicators";
-import type { IAnalysisEngine } from "./types";
+import type { IAnalysisEngine, SentimentInput } from "./types";
 
 export const DISCLAIMER =
   "Phoenix provides probabilistic, informational analysis only. This is not " +
@@ -20,24 +20,25 @@ export const DISCLAIMER =
  *
  * Design intent (ADR-0002): produce an HONEST probabilistic read whose every
  * number is auditable. The forecast is a random-walk-with-drift band: drift comes
- * from blended momentum + macro tilt; the band width comes from realized
- * volatility scaled by horizon. This is deliberately simple and beatable — its job
- * is to be the baseline the Phase-2 ML models must outperform to justify their cost.
+ * from blended momentum + macro tilt (+ optional news sentiment); the band width
+ * comes from realized volatility scaled by horizon. Deliberately simple and
+ * beatable — its job is to be the baseline Phase-2 ML must outperform (ADR-0004).
  */
 export class BaselineEngine implements IAnalysisEngine {
   readonly name = "baseline-ts";
-  readonly version = "0.1.0";
+  readonly version = "0.3.0";
 
   async analyze(input: {
     asset: AssetId;
     series: PricePoint[];
     macro: MacroSnapshot;
     horizonDays: number;
+    sentiment?: SentimentInput;
   }): Promise<AnalysisResult> {
-    const { asset, series, macro, horizonDays } = input;
+    const { asset, series, macro, horizonDays, sentiment } = input;
     const f = computeFeatures(series);
 
-    const signals = this.buildSignals(f, macro);
+    const signals = this.buildSignals(f, macro, sentiment);
     const forecast = this.buildForecast(asset, f, signals, horizonDays);
 
     return {
@@ -58,7 +59,7 @@ export class BaselineEngine implements IAnalysisEngine {
   }
 
   /** Explainable signals — each carries the drivers that produced it (ADR-0002). */
-  private buildSignals(f: FeatureSet, macro: MacroSnapshot): Signal[] {
+  private buildSignals(f: FeatureSet, macro: MacroSnapshot, sentiment?: SentimentInput): Signal[] {
     const signals: Signal[] = [];
 
     // 1) Trend signal from SMA structure.
@@ -140,6 +141,32 @@ export class BaselineEngine implements IAnalysisEngine {
             weight: clampSigned(-f.zScore50 * 0.1),
           },
         ],
+      });
+    }
+
+    // 5) News sentiment (gold-oriented) — ONLY when provided (live forecast).
+    //    Absent in backtests by design (no historical news) — keeps the test causal.
+    if (sentiment && sentiment.scoredCount > 0) {
+      const dir = sentiment.net > 0.1 ? "up" : sentiment.net < -0.1 ? "down" : "neutral";
+      const drivers: Driver[] = [
+        {
+          label: "Net news sentiment",
+          detail: `${sentiment.scoredCount} gold-relevant headlines scored; net gold-oriented sentiment ${sentiment.net.toFixed(2)} (−1 bearish … +1 bullish).`,
+          weight: clampSigned(sentiment.net),
+        },
+      ];
+      for (const h of sentiment.bullishTop.slice(0, 2)) {
+        drivers.push({ label: "Bullish headline", detail: h.title, weight: 0.3 });
+      }
+      for (const h of sentiment.bearishTop.slice(0, 2)) {
+        drivers.push({ label: "Bearish headline", detail: h.title, weight: -0.3 });
+      }
+      signals.push({
+        key: "sentiment",
+        title: "Live news sentiment",
+        direction: dir,
+        strength: clamp01(Math.abs(sentiment.net)),
+        drivers,
       });
     }
 
