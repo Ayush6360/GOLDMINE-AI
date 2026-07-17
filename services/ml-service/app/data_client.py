@@ -34,3 +34,31 @@ def fetch_gold_history(symbol: str = GOLD_SYMBOL, range_: str = "2y", timeout: f
     s = pd.Series({d: c for d, c in rows}, name="close")
     s.index.name = "date"
     return s.sort_index()
+
+
+# Cross-asset symbols with a genuine, well-documented relationship to gold.
+CROSS_SYMBOLS = {
+    "dxy": "DX-Y.NYB",   # US dollar index — inverse to gold
+    "silver": "SI=F",    # co-moves with gold (precious metals complex)
+    "us10y": "^TNX",     # nominal 10y yield — higher yields pressure gold
+    "oil": "CL=F",       # inflation proxy
+}
+
+
+def fetch_multi_asset(range_: str = "2y", timeout: float = 20.0) -> pd.DataFrame:
+    """Fetch gold + cross-asset closes aligned on common dates.
+
+    Returns a DataFrame indexed by date with columns: gold, dxy, silver, us10y, oil.
+    Forward-fills small gaps (holidays differ across markets), then drops any rows
+    still missing so every feature row is complete and causal.
+    """
+    cols = {"gold": fetch_gold_history(GOLD_SYMBOL, range_, timeout)}
+    for name, sym in CROSS_SYMBOLS.items():
+        try:
+            cols[name] = fetch_gold_history(sym, range_, timeout)
+        except Exception:
+            # A missing cross-asset must not break the whole fetch (ADR-0003).
+            continue
+    df = pd.DataFrame(cols).sort_index()
+    df = df.ffill().dropna()
+    return df
