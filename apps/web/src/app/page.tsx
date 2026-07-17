@@ -5,6 +5,8 @@ import { Sparkline } from "@/components/Sparkline";
 import { engine, macroRepo, priceRepo } from "@/lib/container";
 import { fxRateUsdInr, priceProvenance } from "@/lib/data/cachedRepository";
 import { getLiveSentiment } from "@/lib/data/sentimentProvider";
+import { generateReport } from "@/lib/reports/reportGenerator";
+import { listTriggered } from "@/lib/alerts/alertsEngine";
 import { convertGoldPrice, formatPrice, viewFor, type Currency } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +34,10 @@ export default async function Page({
 
   // Next-day directional read for the headline (honest: probability, not a promise).
   const nextDay = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 1, sentiment });
+
+  // Daily digest (data-driven) + any recently triggered alerts (ADR-0007).
+  const report = generateReport({ series, analysis: nextDay, sentiment, macro, currency, usdInr: fx.rate });
+  const triggered = listTriggered(5);
 
   const spot = analysis.spot;
   const first = series[0].close;
@@ -139,6 +145,51 @@ export default async function Page({
             directional relationships — see the macro signal below for how each
             pushes the outlook.
           </p>
+        </div>
+      </section>
+
+      <section className="mt-8 grid gap-6 md:grid-cols-3">
+        <div className="md:col-span-2 rounded-xl bg-phoenix-panel/70 p-5 ring-1 ring-white/5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium">{report.title}</h2>
+            <span className="text-xs text-phoenix-muted">as of {report.asOf}</span>
+          </div>
+          <div className="mt-3 space-y-3">
+            {report.sections.map((s) => (
+              <div key={s.heading}>
+                <h3 className="text-sm font-semibold text-phoenix-gold">{s.heading}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-slate-300">{s.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-phoenix-panel/70 p-5 ring-1 ring-white/5">
+          <h2 className="text-sm font-medium text-phoenix-muted">Alerts</h2>
+          {triggered.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {triggered.map((t) => (
+                <li key={t.id} className="rounded-lg border border-phoenix-gold/20 bg-black/20 p-2 text-xs text-slate-200">
+                  <div>{t.message}</div>
+                  <div className="mt-1 text-phoenix-muted">{new Date(t.triggeredAt).toLocaleString()}</div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-phoenix-muted">
+              No alerts triggered yet. Create one via <code>POST /api/alerts</code> — e.g.
+              &quot;notify me when gold crosses ₹1,25,000/10g&quot; — and it fires on the next data
+              refresh.
+            </p>
+          )}
+          <div className="mt-4 rounded-lg bg-black/20 p-3 text-xs text-phoenix-muted">
+            <div className="font-medium text-slate-300">Digest at a glance</div>
+            <ul className="mt-2 space-y-1">
+              {report.bullets.map((b, i) => (
+                <li key={i}>• {b}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 

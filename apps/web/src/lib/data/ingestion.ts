@@ -2,6 +2,7 @@ import { db } from "@/lib/data/db";
 import { fetchCpiYoY, fetchLatest, FRED_SERIES } from "@/lib/data/sources/fred";
 import { fetchDailyHistory, YAHOO_SYMBOLS } from "@/lib/data/sources/yahoo";
 import { getLiveSentiment } from "@/lib/data/sentimentProvider";
+import { evaluateAlerts } from "@/lib/alerts/alertsEngine";
 import { hasFred } from "@/lib/config";
 
 /**
@@ -17,6 +18,7 @@ export interface IngestReport {
   pricesUpserted: number;
   macroUpserted: number;
   newsUpserted: number;
+  alertsFired: number;
   errors: string[];
   usedFred: boolean;
 }
@@ -29,6 +31,7 @@ export async function runIngestion(): Promise<IngestReport> {
     pricesUpserted: 0,
     macroUpserted: 0,
     newsUpserted: 0,
+    alertsFired: 0,
     errors: [],
     usedFred: hasFred(),
   };
@@ -104,6 +107,27 @@ export async function runIngestion(): Promise<IngestReport> {
     else report.errors.push(`news: net sentiment ${result.net} over ${result.scoredCount} scored`);
   } catch (e) {
     report.errors.push(`news: ${msg(e)}`);
+  }
+
+  // --- Alerts: evaluate against fresh data (ADR-0007) ---
+  try {
+    const gold = database
+      .prepare(`SELECT close FROM prices WHERE asset='gold' ORDER BY date DESC LIMIT 1`)
+      .get() as { close: number } | undefined;
+    const fx = database
+      .prepare(`SELECT value FROM macro WHERE indicator='usdinr' ORDER BY date DESC LIMIT 1`)
+      .get() as { value: number } | undefined;
+    if (gold) {
+      // Direction lean from a quick momentum read (cheap; avoids a full engine call).
+      const recent = database
+        .prepare(`SELECT close FROM prices WHERE asset='gold' ORDER BY date DESC LIMIT 6`)
+        .all() as Array<{ close: number }>;
+      const probUp = recent.length >= 2 && recent[0].close >= recent[recent.length - 1].close ? 0.55 : 0.45;
+      const fired = evaluateAlerts(gold.close, fx?.value ?? 96, probUp);
+      report.alertsFired = fired.length;
+    }
+  } catch (e) {
+    report.errors.push(`alerts: ${msg(e)}`);
   }
 
   // Determine overall status.

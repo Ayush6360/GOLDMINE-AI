@@ -2,6 +2,30 @@
 
 All notable changes to Phoenix.
 
+## [0.7.0] — 2026-07-17
+### Added — Alerts engine + AI report generator (ADR-0007) — the sellable value layer
+- **Alerts:** SQLite `alerts` + `triggered_alerts` tables; engine supports
+  price_above / price_below / direction_flip, currency-aware (USD/oz + INR/10g),
+  idempotent (fires once on cross, re-arms on reset — no spam). Evaluated on every
+  ingest. API: `GET/POST/DELETE /api/alerts`.
+- **Reports:** data-driven daily digest (`reportGenerator.ts`) — real figures
+  (week/month move, next-day read with honest ~55% caveat, top signal, sentiment,
+  macro) composed via deterministic templates; every number traces to data (no LLM
+  hallucination). API: `GET /api/report?ccy=`.
+- Dashboard: digest section + triggered-alerts feed.
+- Verified: USD alert fired ("below $5,000 → $4,004"), INR alert fired
+  ("above ₹1,20,000 → ₹1,23,958"), report renders in USD + INR.
+### Why
+- Accuracy is at its honest ceiling; the subscription sells on VALUE. Alerts drive
+  daily re-engagement; reports are shareable. Zero accuracy inflation, zero new data
+  cost — a packaging layer on existing intelligence (ADR-0007).
+
+## [0.6.0] — 2026-07-17
+### Added — Cross-asset features (honest edge experiment, ADR-0006)
+- Multi-asset fetch (gold+DXY+silver+10y+oil), `cross_features.py`, experiment harness.
+- Finding: cross-asset lifts 1d 48.5%→56.5% but only +2pts vs baseline and edge flips
+  to ~0 on window shift — real but marginal. Shipped honestly, not oversold.
+
 ## [0.5.0] — 2026-07-17
 ### Added — USD + INR currency support
 - USD/INR FX ingested from Yahoo (`USDINR=X`, keyless), stored in SQLite macro table.
