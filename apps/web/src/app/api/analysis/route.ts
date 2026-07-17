@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { engine, macroRepo, priceRepo } from "@/lib/container";
+import { engine, macroRepo, mlEngine, priceRepo } from "@/lib/container";
 import { priceProvenance } from "@/lib/data/cachedRepository";
 import { getLiveSentiment } from "@/lib/data/sentimentProvider";
 
@@ -9,6 +9,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const horizonDays = clampInt(searchParams.get("horizon"), 30, 1, 90);
   const withNews = searchParams.get("news") !== "false";
+  // OPT-IN experimental ML engine (ADR-0005: did NOT beat baseline; not default).
+  const useMl = searchParams.get("engine") === "ml";
 
   try {
     const [series, macro] = await Promise.all([
@@ -21,9 +23,34 @@ export async function GET(request: Request) {
     }
 
     const sentiment = withNews ? (await getLiveSentiment()).result : undefined;
-    const result = await engine.analyze({ asset: "gold", series, macro, horizonDays, sentiment });
+
+    // ML path is opt-in and falls back to the honest baseline if the service is down.
+    let engineUsed = "baseline";
+    let mlFallback = false;
+    let result;
+    if (useMl) {
+      try {
+        result = await mlEngine.analyze({ asset: "gold", series, macro, horizonDays, sentiment });
+        engineUsed = "ml";
+      } catch {
+        result = await engine.analyze({ asset: "gold", series, macro, horizonDays, sentiment });
+        mlFallback = true;
+      }
+    } else {
+      result = await engine.analyze({ asset: "gold", series, macro, horizonDays, sentiment });
+    }
+
     const prov = priceProvenance("gold");
-    return NextResponse.json({ ...result, live: prov.live, source: prov.source, sentiment });
+    return NextResponse.json({
+      ...result,
+      live: prov.live,
+      source: prov.source,
+      sentiment,
+      engineUsed,
+      mlFallback,
+      mlNote:
+        "The ML engine is experimental and did NOT beat the honest baseline in walk-forward testing (ADR-0005). It is offered for comparison, not as a more-accurate forecast.",
+    });
   } catch {
     return NextResponse.json({ error: "analysis_failed" }, { status: 500 });
   }

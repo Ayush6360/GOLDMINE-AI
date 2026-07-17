@@ -2,6 +2,27 @@
 
 All notable changes to Phoenix.
 
+## [0.4.0] — 2026-07-17
+### Added — real Python ML service (ADR-0005)
+- **Python 3.12 installed** (winget). `services/ml-service`: FastAPI + LightGBM.
+- Feature engineering (`features.py`) with parity to the TS indicators + RSI, band
+  distances; strictly causal.
+- **LightGBM model** (`model.py`): direction classifier + two quantile regressors
+  for a learned 80% band; conservative hyperparameters to resist overfitting; genuine
+  per-feature log-odds explainability (LightGBM pred_contrib).
+- **Walk-forward backtester** (`backtest.py`): same causal methodology as the TS one;
+  retrains on expanding past-only windows; scores vs naive + always-up.
+- `POST /v1/analyze` + `GET /health` (publishes the honest backtest verdict).
+- `HttpEngine` in the web app calls the service behind `IAnalysisEngine`; **opt-in**
+  via `GET /api/analysis?engine=ml` with graceful fallback to baseline if the service
+  is down (`mlFallback: true`). Verified cross-service call + fallback.
+### Result — HONEST NEGATIVE (this is the system working)
+- ML did **NOT** beat the baseline: 1d 48.0% vs always-up 54.4%; 5d 48.5% vs 54.5%;
+  10d 54.9% ≈ 54.9%. Daily gold ≈ random walk. We keep the TS baseline as default and
+  label the ML engine experimental — **no accuracy inflation** (ADR-0004/0005).
+- Lesson baked into the roadmap: accuracy gains must come from better *data/features*
+  (sentiment history, macro surprises, cross-asset), each clearing the same gate.
+
 ## [0.3.0] — 2026-07-17
 ### Added — the honest forecasting loop (ADR-0004)
 - **Walk-forward backtester** (`engine/backtest.ts`): strictly causal (no lookahead),
