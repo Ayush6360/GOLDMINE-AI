@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const days = clampInt(searchParams.get("days"), 90, 1, 400);
   try {
     const series = await priceRepo.getSeries("gold", days);
-    const prov = priceProvenance("gold");
+    const prov = await priceProvenance("gold");
     return NextResponse.json({
       asset: "gold",
       live: prov.live,

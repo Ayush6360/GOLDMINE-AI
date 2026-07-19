@@ -24,8 +24,8 @@ export async function answerQuestion(
   const { result: sentiment } = await getLiveSentiment();
   const analysis = await engine.analyze({ asset: "gold", series, macro, horizonDays: 5, sentiment });
 
-  const context = retrieve(question);
-  const fx = fxRateUsdInr();
+  const context = await retrieve(question);
+  const fx = await fxRateUsdInr();
   const view = viewFor(currency);
   const fmt = (usd: number) => formatPrice(convertGoldPrice(usd, currency, fx.rate), view);
 

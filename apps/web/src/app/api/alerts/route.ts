@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 const VALID_TYPES: AlertType[] = ["price_above", "price_below", "direction_flip"];
 
 export async function GET() {
-  return NextResponse.json({ alerts: listAlerts(), triggered: listTriggered() });
+  const [alerts, triggered] = await Promise.all([listAlerts(), listTriggered()]);
+  return NextResponse.json({ alerts, triggered });
 }
 
 export async function POST(request: Request) {
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     }
   }
   const currency: Currency = b.currency === "INR" ? "INR" : "USD";
-  const alert = createAlert({ type: b.type as AlertType, threshold: b.threshold, currency });
+  const alert = await createAlert({ type: b.type as AlertType, threshold: b.threshold, currency });
   return NextResponse.json({ alert }, { status: 201 });
 }
 
@@ -36,6 +37,6 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = Number(searchParams.get("id"));
   if (!id) return NextResponse.json({ error: "id_required" }, { status: 422 });
-  const ok = deleteAlert(id);
+  const ok = await deleteAlert(id);
   return NextResponse.json({ deleted: ok }, { status: ok ? 200 : 404 });
 }

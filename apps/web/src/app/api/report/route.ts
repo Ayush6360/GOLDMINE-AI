@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     }
     const { result: sentiment } = await getLiveSentiment();
     const analysis = await engine.analyze({ asset: "gold", series, macro, horizonDays: 1, sentiment });
-    const fx = fxRateUsdInr();
+    const fx = await fxRateUsdInr();
 
     const report = generateReport({ series, analysis, sentiment, macro, currency, usdInr: fx.rate });
     return NextResponse.json({ report });

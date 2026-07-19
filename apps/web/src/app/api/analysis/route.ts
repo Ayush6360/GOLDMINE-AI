@@ -41,8 +41,8 @@ export async function GET(request: Request) {
       result = await engine.analyze({ asset: "gold", series, macro, horizonDays, sentiment });
     }
 
-    const prov = priceProvenance("gold");
-    const fx = fxRateUsdInr();
+    const prov = await priceProvenance("gold");
+    const fx = await fxRateUsdInr();
     return NextResponse.json({
       ...result,
       live: prov.live,

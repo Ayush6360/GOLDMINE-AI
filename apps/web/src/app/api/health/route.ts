@@ -4,6 +4,7 @@ import { hasFred } from "@/lib/config";
 import { macroProvenance } from "@/lib/data/cachedRepository";
 
 export async function GET() {
+  const macro = await macroProvenance();
   return NextResponse.json({
     status: "ok",
     service: "phoenix-web",
@@ -12,7 +13,7 @@ export async function GET() {
     fredEnabled: hasFred(),
     // Per-field macro sources — shows whether real FRED data is flowing.
     macroSources: Object.fromEntries(
-      Object.entries(macroProvenance()).map(([k, v]) => [k, v.source]),
+      Object.entries(macro).map(([k, v]) => [k, v.source]),
     ),
   });
 }

@@ -20,7 +20,7 @@ export default async function Page({
   const { ccy } = await searchParams;
   const currency: Currency = ccy === "INR" ? "INR" : "USD";
   const view = viewFor(currency);
-  const fx = fxRateUsdInr();
+  const fx = await fxRateUsdInr();
   /** Convert a raw USD/oz value into the selected currency view + format it. */
   const fmt = (usdPerOz: number) => formatPrice(convertGoldPrice(usdPerOz, currency, fx.rate), view);
 
@@ -31,14 +31,14 @@ export default async function Page({
   const full = await priceRepo.getSeries("gold", 200);
   const { result: sentiment } = await getLiveSentiment();
   const analysis = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 30, sentiment });
-  const prov = priceProvenance("gold");
+  const prov = await priceProvenance("gold");
 
   // Next-day directional read for the headline (honest: probability, not a promise).
   const nextDay = await engine.analyze({ asset: "gold", series: full, macro, horizonDays: 1, sentiment });
 
   // Daily digest (data-driven) + any recently triggered alerts (ADR-0007).
   const report = generateReport({ series, analysis: nextDay, sentiment, macro, currency, usdInr: fx.rate });
-  const triggered = listTriggered(5);
+  const triggered = await listTriggered(5);
 
   const spot = analysis.spot;
   const first = series[0].close;

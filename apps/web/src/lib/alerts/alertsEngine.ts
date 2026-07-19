@@ -1,4 +1,4 @@
-import { db } from "@/lib/data/db";
+import { dbGet, dbAll, dbRun } from "@/lib/data/db";
 import { convertGoldPrice, formatPrice, viewFor, type Currency } from "@/lib/currency";
 
 /**
@@ -29,47 +29,47 @@ export interface TriggeredAlert {
   value: number;
 }
 
-export function createAlert(input: {
+export async function createAlert(input: {
   type: AlertType;
   threshold?: number;
   currency?: Currency;
   asset?: string;
-}): Alert {
+}): Promise<Alert> {
   const createdAt = new Date().toISOString();
-  const res = db()
-    .prepare(
-      `INSERT INTO alerts (asset, type, threshold, currency, state, created_at)
-       VALUES (?, ?, ?, ?, 'armed', ?)`,
-    )
-    .run(
+  const res = await dbRun(
+    `INSERT INTO alerts (asset, type, threshold, currency, state, created_at)
+     VALUES (?, ?, ?, ?, 'armed', ?)`,
+    [
       input.asset ?? "gold",
       input.type,
       input.threshold ?? null,
       input.currency ?? "USD",
       createdAt,
-    );
-  return getAlert(Number(res.lastInsertRowid))!;
+    ],
+  );
+  return (await getAlert(Number(res.lastInsertRowid)))!;
 }
 
-export function getAlert(id: number): Alert | null {
-  const row = db().prepare(`SELECT * FROM alerts WHERE id = ?`).get(id) as AlertRow | undefined;
+export async function getAlert(id: number): Promise<Alert | null> {
+  const row = await dbGet<AlertRow>(`SELECT * FROM alerts WHERE id = ?`, [id]);
   return row ? mapAlert(row) : null;
 }
 
-export function listAlerts(): Alert[] {
-  const rows = db().prepare(`SELECT * FROM alerts ORDER BY created_at DESC`).all() as AlertRow[];
+export async function listAlerts(): Promise<Alert[]> {
+  const rows = await dbAll<AlertRow>(`SELECT * FROM alerts ORDER BY created_at DESC`);
   return rows.map(mapAlert);
 }
 
-export function deleteAlert(id: number): boolean {
-  const res = db().prepare(`DELETE FROM alerts WHERE id = ?`).run(id);
+export async function deleteAlert(id: number): Promise<boolean> {
+  const res = await dbRun(`DELETE FROM alerts WHERE id = ?`, [id]);
   return res.changes > 0;
 }
 
-export function listTriggered(limit = 20): TriggeredAlert[] {
-  const rows = db()
-    .prepare(`SELECT * FROM triggered_alerts ORDER BY triggered_at DESC LIMIT ?`)
-    .all(limit) as Array<{ id: number; alert_id: number; triggered_at: string; message: string; value: number }>;
+export async function listTriggered(limit = 20): Promise<TriggeredAlert[]> {
+  const rows = await dbAll<{ id: number; alert_id: number; triggered_at: string; message: string; value: number }>(
+    `SELECT * FROM triggered_alerts ORDER BY triggered_at DESC LIMIT ?`,
+    [limit],
+  );
   return rows.map((r) => ({
     id: r.id,
     alertId: r.alert_id,
@@ -87,9 +87,8 @@ export function listTriggered(limit = 20): TriggeredAlert[] {
  * @param usdInr    current USD/INR rate (for INR-denominated alerts)
  * @param probUp    latest next-day P(up), for direction_flip alerts
  */
-export function evaluateAlerts(usdSpot: number, usdInr: number, probUp: number): TriggeredAlert[] {
-  const database = db();
-  const alerts = listAlerts();
+export async function evaluateAlerts(usdSpot: number, usdInr: number, probUp: number): Promise<TriggeredAlert[]> {
+  const alerts = await listAlerts();
   const fired: TriggeredAlert[] = [];
   const now = new Date().toISOString();
 
@@ -104,14 +103,14 @@ export function evaluateAlerts(usdSpot: number, usdInr: number, probUp: number):
         shouldFire = true;
         message = `Gold crossed ABOVE ${formatPrice(a.threshold, viewFor(a.currency))} — now ${formatPrice(priceInCcy, viewFor(a.currency))}.`;
       }
-      if (priceInCcy < a.threshold && a.state === "triggered") reArm(database, a.id); // reset
+      if (priceInCcy < a.threshold && a.state === "triggered") await reArm(a.id); // reset
     } else if (a.type === "price_below" && a.threshold !== null) {
       const crossedDown = priceInCcy <= a.threshold && (a.lastValue === null || a.lastValue > a.threshold);
       if (a.state === "armed" && crossedDown) {
         shouldFire = true;
         message = `Gold fell BELOW ${formatPrice(a.threshold, viewFor(a.currency))} — now ${formatPrice(priceInCcy, viewFor(a.currency))}.`;
       }
-      if (priceInCcy > a.threshold && a.state === "triggered") reArm(database, a.id);
+      if (priceInCcy > a.threshold && a.state === "triggered") await reArm(a.id);
     } else if (a.type === "direction_flip") {
       // Fire when the next-day lean flips relative to last recorded value.
       const leanUp = probUp >= 0.5 ? 1 : 0;
@@ -119,25 +118,26 @@ export function evaluateAlerts(usdSpot: number, usdInr: number, probUp: number):
         shouldFire = true;
         message = `Next-day outlook flipped to ${leanUp ? "LEAN UP ▲" : "LEAN DOWN ▼"} (P(up) ${(probUp * 100).toFixed(0)}%).`;
       }
-      database.prepare(`UPDATE alerts SET last_value = ? WHERE id = ?`).run(leanUp, a.id);
+      await dbRun(`UPDATE alerts SET last_value = ? WHERE id = ?`, [leanUp, a.id]);
     }
 
     if (shouldFire) {
-      const res = database
-        .prepare(`INSERT INTO triggered_alerts (alert_id, triggered_at, message, value) VALUES (?, ?, ?, ?)`)
-        .run(a.id, now, message, priceInCcy);
-      database.prepare(`UPDATE alerts SET state = 'triggered', last_value = ? WHERE id = ?`).run(priceInCcy, a.id);
+      const res = await dbRun(
+        `INSERT INTO triggered_alerts (alert_id, triggered_at, message, value) VALUES (?, ?, ?, ?)`,
+        [a.id, now, message, priceInCcy],
+      );
+      await dbRun(`UPDATE alerts SET state = 'triggered', last_value = ? WHERE id = ?`, [priceInCcy, a.id]);
       fired.push({ id: Number(res.lastInsertRowid), alertId: a.id, triggeredAt: now, message, value: priceInCcy });
     } else if (a.type !== "direction_flip") {
       // Keep last_value fresh for crossing detection next time.
-      database.prepare(`UPDATE alerts SET last_value = ? WHERE id = ?`).run(priceInCcy, a.id);
+      await dbRun(`UPDATE alerts SET last_value = ? WHERE id = ?`, [priceInCcy, a.id]);
     }
   }
   return fired;
 }
 
-function reArm(database: ReturnType<typeof db>, id: number): void {
-  database.prepare(`UPDATE alerts SET state = 'armed' WHERE id = ?`).run(id);
+async function reArm(id: number): Promise<void> {
+  await dbRun(`UPDATE alerts SET state = 'armed' WHERE id = ?`, [id]);
 }
 
 interface AlertRow {

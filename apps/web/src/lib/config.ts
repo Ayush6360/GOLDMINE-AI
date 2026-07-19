@@ -5,8 +5,14 @@
 export const config = {
   /** FRED API key — optional. Absent → macro degrades gracefully (ADR-0003). */
   fredApiKey: process.env.FRED_API_KEY ?? "",
-  /** SQLite file location. */
+  /** Local SQLite file location (used when no Turso URL is set — e.g. local dev). */
   dbPath: process.env.PHOENIX_DB_PATH ?? "phoenix.db",
+  /**
+   * Turso (libSQL) hosted DB — required on Vercel (serverless has no persistent
+   * disk). If unset, we fall back to a local file so dev works with zero setup.
+   */
+  tursoUrl: process.env.TURSO_DATABASE_URL ?? "",
+  tursoAuthToken: process.env.TURSO_AUTH_TOKEN ?? "",
   /** Master switch: use live sources + SQLite, or fall back to pure seed data. */
   useLiveData: (process.env.PHOENIX_LIVE_DATA ?? "true") !== "false",
   /** Network timeout for source fetches (ms). */

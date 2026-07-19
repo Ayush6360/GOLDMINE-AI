@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       minTrain: 60,
       horizonDays,
     });
-    const prov = priceProvenance("gold");
+    const prov = await priceProvenance("gold");
     return NextResponse.json({ ...result, live: prov.live, source: prov.source });
   } catch (e) {
     return NextResponse.json(

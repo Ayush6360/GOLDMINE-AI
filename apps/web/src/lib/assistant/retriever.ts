@@ -1,4 +1,4 @@
-import { db } from "@/lib/data/db";
+import { dbGet, dbAll } from "@/lib/data/db";
 import type { MacroSnapshot, PricePoint } from "@/lib/domain/types";
 
 /**
@@ -30,13 +30,15 @@ const STOP = new Set([
   "tell", "about", "today", "now", "this", "that", "it", "its",
 ]);
 
-export function retrieve(question: string, opts?: { newsLimit?: number }): RetrievedContext {
+export async function retrieve(question: string, opts?: { newsLimit?: number }): Promise<RetrievedContext> {
   const newsLimit = opts?.newsLimit ?? 6;
   const terms = tokenize(question);
 
-  const news = retrieveNews(terms, newsLimit);
-  const priceMoves = retrievePriceMoves();
-  const macro = retrieveMacro();
+  const [news, priceMoves, macro] = await Promise.all([
+    retrieveNews(terms, newsLimit),
+    retrievePriceMoves(),
+    retrieveMacro(),
+  ]);
 
   return { news, priceMoves, macro, question };
 }
@@ -49,12 +51,12 @@ function tokenize(q: string): string[] {
     .filter((w) => w.length > 2 && !STOP.has(w));
 }
 
-function retrieveNews(terms: string[], limit: number): RetrievedNews[] {
+async function retrieveNews(terms: string[], limit: number): Promise<RetrievedNews[]> {
   let rows: NewsRow[] = [];
   try {
-    rows = db()
-      .prepare(`SELECT title, url, published_at, source, score FROM news ORDER BY published_at DESC LIMIT 200`)
-      .all() as NewsRow[];
+    rows = await dbAll<NewsRow>(
+      `SELECT title, url, published_at, source, score FROM news ORDER BY published_at DESC LIMIT 200`,
+    );
   } catch {
     return [];
   }
@@ -80,10 +82,10 @@ function retrieveNews(terms: string[], limit: number): RetrievedNews[] {
   return scored.slice(0, limit);
 }
 
-function retrievePriceMoves(): RetrievedContext["priceMoves"] {
-  const rows = db()
-    .prepare(`SELECT date, close FROM prices WHERE asset='gold' ORDER BY date DESC LIMIT 25`)
-    .all() as Array<{ date: string; close: number }>;
+async function retrievePriceMoves(): Promise<RetrievedContext["priceMoves"]> {
+  const rows = await dbAll<{ date: string; close: number }>(
+    `SELECT date, close FROM prices WHERE asset='gold' ORDER BY date DESC LIMIT 25`,
+  );
   if (rows.length === 0) {
     const empty = { date: "n/a", close: 0 };
     return { last: empty, weekAgo: empty, monthAgo: empty, wChg: 0, mChg: 0 };
@@ -102,22 +104,23 @@ function retrievePriceMoves(): RetrievedContext["priceMoves"] {
   };
 }
 
-function retrieveMacro(): MacroSnapshot | null {
+async function retrieveMacro(): Promise<MacroSnapshot | null> {
   try {
-    const get = (ind: string): number | null => {
-      const r = db()
-        .prepare(`SELECT value FROM macro WHERE indicator=? ORDER BY date DESC LIMIT 1`)
-        .get(ind) as { value: number } | undefined;
+    const get = async (ind: string): Promise<number | null> => {
+      const r = await dbGet<{ value: number }>(
+        `SELECT value FROM macro WHERE indicator=? ORDER BY date DESC LIMIT 1`,
+        [ind],
+      );
       return r ? r.value : null;
     };
-    const dxy = get("dxy");
+    const dxy = await get("dxy");
     if (dxy === null) return null;
     return {
       date: new Date().toISOString().slice(0, 10),
       dxy,
-      realYield10y: get("real_yield_10y") ?? get("us10y_nominal") ?? 0,
-      cpiYoY: get("cpi_yoy") ?? 0,
-      policyRate: get("policy_rate") ?? 0,
+      realYield10y: (await get("real_yield_10y")) ?? (await get("us10y_nominal")) ?? 0,
+      cpiYoY: (await get("cpi_yoy")) ?? 0,
+      policyRate: (await get("policy_rate")) ?? 0,
     };
   } catch {
     return null;
